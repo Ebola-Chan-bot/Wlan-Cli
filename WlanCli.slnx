@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="WlanCli/WlanCli.vcxproj" Id="9e96abc3-6bba-46b9-abe3-e9fd636780f9" />
+</Solution>
