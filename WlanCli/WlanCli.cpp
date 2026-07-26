@@ -245,8 +245,11 @@ int wmain(int 参数个数, wchar_t* 参数值[]) {
 	输入字段数组.pFields[1].pwszData = 密码;
 	wprintf(L"  已设置用户名和密码\n");
 
-	BYTE* 用户数据块;
+	BYTE* 用户数据块 = nullptr;
+	尺寸 = 0;
+	//EapHostPeerQueryUserBlobFromCredentialInputFields会检查这两个参数，不设为0时行为不同
 	EapHostPeerQueryUserBlobFromCredentialInputFields(NULL, 身份验证方法, 0, 配置数据块尺寸, 配置数据块, &输入字段数组, &尺寸, &用户数据块, &身份验证错误);
+
 	wprintf(L"  用户数据块大小：%lu 字节\n", 尺寸);
 
 	wprintf(L"\n[6] 正在向 WlanSvc 注册凭据...\n");
@@ -269,12 +272,11 @@ int wmain(int 参数个数, wchar_t* 参数值[]) {
 			GetEnvironmentVariableW(L"ProgramData", 缓冲区, static_cast<DWORD>(长度));
 			return 长度 - 1;
 		});
-	std::filesystem::path const 配置目录 = std::filesystem::path(路径文本) / L"Microsoft" / L"Wlansvc" / L"Profiles" / L"Interfaces" / reinterpret_cast<wchar_t const*>(目标唯一标识字符串);
 
 	// 用步骤 [4] 已转好的 UTF-8 SSID 构造搜索模式，直接在原始字节中匹配
 	临时文本 = "<name>" + 网络标识_utf8 + "</name>";
 
-	for (auto const& 条目 : std::filesystem::directory_iterator{ 配置目录 }) {
+	for (auto const& 条目 : std::filesystem::directory_iterator{ std::filesystem::path{路径文本 + L"\\Microsoft\\Wlansvc\\Profiles\\Interfaces\\{" + reinterpret_cast<wchar_t const*>(目标唯一标识字符串) + L"}"} }) {
 		if (!条目.is_regular_file() || 条目.path().extension() != L".xml") continue;
 
 		文件句柄 = CreateFileW(条目.path().c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
@@ -306,13 +308,11 @@ int wmain(int 参数个数, wchar_t* 参数值[]) {
 	wprintf(L"  已向 MSMUserData 写入 %lu 字节\n", 加密数据.cbData);
 
 	wprintf(L"\n[9] 正在连接...\n");
-	WLAN_CONNECTION_PARAMETERS 连接参数;
-	连接参数.wlanConnectionMode = wlan_connection_mode_profile;
-	连接参数.strProfile = 网络标识;
-	连接参数.dot11BssType = dot11_BSS_type_infrastructure;
-	连接参数.dwFlags = 0;
 
+	WLAN_CONNECTION_PARAMETERS 连接参数{ .wlanConnectionMode = wlan_connection_mode_profile,.strProfile = 网络标识,.dot11BssType = dot11_BSS_type_infrastructure,.dwFlags = 0 };
+	//WlanConnect要求WLAN_CONNECTION_PARAMETERS其它成员必须为NULL，不能为未定义值
 	WlanConnect(无线句柄, &目标唯一标识, &连接参数, NULL);
+
 	wprintf(L"  已成功发起连接。\n");
 
 	wprintf(L"  正在等待连接...\n");
@@ -333,7 +333,7 @@ int wmain(int 参数个数, wchar_t* 参数值[]) {
 		&上下文, nullptr, &之前通知源);
 
 	if (WaitForSingleObject(文件句柄, INFINITE) == WAIT_OBJECT_0) {
-		PWLAN_CONNECTION_ATTRIBUTES 连接属性 = nullptr;
+		PWLAN_CONNECTION_ATTRIBUTES 连接属性;
 		DWORD 属性大小 = sizeof(WLAN_CONNECTION_ATTRIBUTES);
 		WlanQueryInterface(无线句柄, &目标唯一标识, wlan_intf_opcode_current_connection,
 			nullptr, &属性大小, reinterpret_cast<PVOID*>(&连接属性), nullptr);
