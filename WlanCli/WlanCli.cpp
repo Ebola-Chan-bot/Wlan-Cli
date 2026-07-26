@@ -106,7 +106,7 @@ int wmain(int 参数个数, wchar_t* 参数值[]) {
 		return 1;
 	}
 
-	wprintf(L"=== WPA2 企业级无线网络修复工具 ===\n");
+	wprintf(L"=== WPA2 无线网络连接工具，作者：埃博拉酱 ===\n");
 	wprintf(L"  网络标识：%s\n", 网络标识);
 	wprintf(L"  用户名：  %s\n", 用户名);
 	wprintf(L"  密码：    ********\n");
@@ -322,32 +322,30 @@ int wmain(int 参数个数, wchar_t* 参数值[]) {
 	{
 		HANDLE 事件;
 		GUID const* 目标;
-	} 上下文 = { 文件句柄, &目标唯一标识 };
+		DWORD 原因码;
+	} 上下文 = { 文件句柄, &目标唯一标识, 0 };
 	WlanRegisterNotification(无线句柄, WLAN_NOTIFICATION_SOURCE_ACM, FALSE,
 		[](PWLAN_NOTIFICATION_DATA 通知, PVOID 上下文指针) {
 			auto& ctx = *reinterpret_cast<通知上下文*>(上下文指针);
-			if (通知->NotificationCode == wlan_notification_acm_connection_complete &&
-				IsEqualGUID(通知->InterfaceGuid, *ctx.目标))
+
+			if (通知->NotificationCode == wlan_notification_acm_connection_complete)
+			//可能有不满足此条件的提前通知
+			{
+				ctx.原因码 = static_cast<WLAN_CONNECTION_NOTIFICATION_DATA*>(通知->pData)->wlanReasonCode;
 				SetEvent(ctx.事件);
+			}
 		},
 		&上下文, nullptr, &之前通知源);
 
-	if (WaitForSingleObject(文件句柄, INFINITE) == WAIT_OBJECT_0) {
-		PWLAN_CONNECTION_ATTRIBUTES 连接属性;
-		DWORD 属性大小 = sizeof(WLAN_CONNECTION_ATTRIBUTES);
-		WlanQueryInterface(无线句柄, &目标唯一标识, wlan_intf_opcode_current_connection,
-			nullptr, &属性大小, reinterpret_cast<PVOID*>(&连接属性), nullptr);
-		if (连接属性->isState == wlan_interface_state_connected) {
-			wprintf(L"\n  *** 已连接！***\n");
-			wprintf(L"  网络标识：%.*hs\n", static_cast<int>(连接属性->wlanAssociationAttributes.dot11Ssid.uSSIDLength), 连接属性->wlanAssociationAttributes.dot11Ssid.ucSSID);
-			wprintf(L"  接入点地址：%02X:%02X:%02X:%02X:%02X:%02X\n", 连接属性->wlanAssociationAttributes.dot11Bssid[0], 连接属性->wlanAssociationAttributes.dot11Bssid[1], 连接属性->wlanAssociationAttributes.dot11Bssid[2], 连接属性->wlanAssociationAttributes.dot11Bssid[3], 连接属性->wlanAssociationAttributes.dot11Bssid[4], 连接属性->wlanAssociationAttributes.dot11Bssid[5]);
-			wprintf(L"  认证：%lu，加密：%lu，信号：%lu%%\n", 连接属性->wlanSecurityAttributes.bSecurityEnabled ? 连接属性->wlanSecurityAttributes.dot11AuthAlgorithm : 0, 连接属性->wlanSecurityAttributes.dot11CipherAlgorithm, 连接属性->wlanAssociationAttributes.wlanSignalQuality);
-		} else {
-			wprintf(L"\n  连接未成功，接口状态=%lu\n", 连接属性->isState);
-		}
-		WlanFreeMemory(连接属性);
+	WaitForSingleObject(文件句柄, INFINITE);
+	if (上下文.原因码) {
+		wchar_t 原因文本[1024];
+		WlanReasonCodeToString(上下文.原因码, _countof(原因文本), 原因文本, nullptr);
+		wprintf(L"\n  连接失败：%s\n", 原因文本);
+		if(上下文.原因码== WLAN_REASON_CODE_NETWORK_NOT_AVAILABLE)
+			wprintf(L"检查用户名密码是否正确\n");
+		return 1;
 	}
-
-	wprintf(L"\n完成。\n");
+	wprintf(L"\n  *** 已连接！***\n");
 	return 0;
 }
